@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { TileInfo } from '../types';
 import { tileToWorld, RENDER_CHUNK, CHUNKS_PER_AXIS } from './cityGrid';
+import { useColorMode } from '../hooks/useTheme';
 
 const TILE_UNIT = 1;
 const TILE_GAP = 0.02;
@@ -19,18 +20,29 @@ function tileHash(gx: number, gy: number): number {
 }
 const WARNING_STATUSES = new Set(['MissingResources', 'Paused']);
 
-const COLOR_PLAYER       = new THREE.Color('#4ade80');
-const COLOR_WARNING      = new THREE.Color('#f59e0b');
-const COLOR_CONSTRUCTION = new THREE.Color('#60a5fa'); // blue-400 for under construction
-const COLOR_DEFAULT      = new THREE.Color('#86c280');
-const COLOR_HOVER        = new THREE.Color('#a3d99c');
-function tileColor(tile: TileInfo, myPlayerId: string): THREE.Color {
-  if (tile.building_status === 'UnderConstruction') return COLOR_CONSTRUCTION;
+// Light and dark mode tile color palettes
+const LIGHT_COLORS = {
+  player:       new THREE.Color('#4ade80'),
+  warning:      new THREE.Color('#f59e0b'),
+  construction: new THREE.Color('#60a5fa'),
+  default_:     new THREE.Color('#86c280'),
+  hover:        new THREE.Color('#a3d99c'),
+};
+const DARK_COLORS = {
+  player:       new THREE.Color('#22804a'),
+  warning:      new THREE.Color('#b57a08'),
+  construction: new THREE.Color('#3b6fc0'),
+  default_:     new THREE.Color('#3a5a38'),
+  hover:        new THREE.Color('#4a7048'),
+};
+
+function tileColor(tile: TileInfo, myPlayerId: string, palette: typeof LIGHT_COLORS): THREE.Color {
+  if (tile.building_status === 'UnderConstruction') return palette.construction;
   if (tile.owner_player_id === myPlayerId) {
-    if (WARNING_STATUSES.has(tile.building_status)) return COLOR_WARNING;
-    return COLOR_PLAYER;
+    if (WARNING_STATUSES.has(tile.building_status)) return palette.warning;
+    return palette.player;
   }
-  return COLOR_DEFAULT;
+  return palette.default_;
 }
 
 interface TileGrid3DProps {
@@ -57,11 +69,12 @@ interface TileChunkProps {
   geometry: THREE.PlaneGeometry;
   material: THREE.MeshStandardMaterial;
   onTileEvent: (type: 'click' | 'hover' | 'leave', key: string | null) => void;
+  palette: typeof LIGHT_COLORS;
 }
 
 function TileChunk({
   chunkX, chunkY, tiles, myPlayerId, selectedTile, hoveredTile,
-  geometry, material, onTileEvent,
+  geometry, material, onTileEvent, palette,
 }: TileChunkProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const tileIndexMap = useRef<Map<number, string>>(new Map());
@@ -99,7 +112,7 @@ function TileChunk({
           _tempMatrix.setPosition(wx + TILE_UNIT / 2, 0.01, wz + TILE_UNIT / 2);
           mesh.setMatrixAt(idx, _tempMatrix);
 
-          const base = tileColor(tile, myPlayerId);
+          const base = tileColor(tile, myPlayerId, palette);
           const variation = tileHash(gx, gy) * 0.06 - 0.03;
           _tempColor.setRGB(
             Math.min(1, Math.max(0, base.r + variation)),
@@ -129,7 +142,7 @@ function TileChunk({
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
     invalidate();
-  }, [tiles, myPlayerId, chunkX, chunkY, invalidate]);
+  }, [tiles, myPlayerId, chunkX, chunkY, palette, invalidate]);
 
   // Lightweight highlight update: only touches 2-4 instance colors
   useEffect(() => {
@@ -158,7 +171,7 @@ function TileChunk({
       if (idx !== undefined) {
         const tile = tiles.get(selectedKey);
         if (tile) {
-          const base = tileColor(tile, myPlayerId);
+          const base = tileColor(tile, myPlayerId, palette);
           _tempColor.setRGB(
             Math.min(1, base.r + 0.25),
             Math.min(1, base.g + 0.25),
@@ -171,7 +184,7 @@ function TileChunk({
     if (hoveredKey && hoveredKey !== selectedKey) {
       const idx = keyToIdxMap.current.get(hoveredKey);
       if (idx !== undefined) {
-        mesh.setColorAt(idx, COLOR_HOVER);
+        mesh.setColorAt(idx, palette.hover);
       }
     }
 
@@ -180,7 +193,7 @@ function TileChunk({
 
     mesh.instanceColor.needsUpdate = true;
     invalidate();
-  }, [selectedTile, hoveredTile, tiles, myPlayerId, invalidate]);
+  }, [selectedTile, hoveredTile, tiles, myPlayerId, palette, invalidate]);
 
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
@@ -244,6 +257,9 @@ export default function TileGrid3D({
   onSelect,
   onHover,
 }: TileGrid3DProps) {
+  const colorMode = useColorMode();
+  const palette = colorMode === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+
   const geometry = useMemo(() => new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE), []);
   const material = useMemo(
     () => new THREE.MeshStandardMaterial({
@@ -298,6 +314,7 @@ export default function TileGrid3D({
           geometry={geometry}
           material={material}
           onTileEvent={handleTileEvent}
+          palette={palette}
         />
       ))}
     </>

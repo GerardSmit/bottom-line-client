@@ -3,6 +3,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { MapControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { WORLD_SIZE, worldToTile, GAME_GRID } from './cityGrid';
+import { useColorMode } from '../hooks/useTheme';
 
 // Module-level temporaries (safe: R3F callbacks are single-threaded)
 const _kbForward = new THREE.Vector3();
@@ -445,21 +446,24 @@ function VisibleBoundsTracker({ onChange }: { onChange: (bounds: { minX: number;
   return null;
 }
 
-function GridGround() {
+function GridGround({ dark }: { dark?: boolean }) {
   const gridRef = useRef<THREE.GridHelper>(null);
+  const groundColor = dark ? '#2a3a2a' : '#5a8a50';
+  const gridMajor = dark ? '#344534' : '#6b9a60';
+  const gridMinor = dark ? '#2a3a2a' : '#5a8a50';
 
   return (
     <group position={[WORLD_SIZE / 2, 0, WORLD_SIZE / 2]}>
       {/* Ground plane */}
       <mesh name="Ground" rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[WORLD_SIZE, WORLD_SIZE]} />
-        <meshStandardMaterial color="#5a8a50" />
+        <meshStandardMaterial color={groundColor} />
       </mesh>
 
       {/* Grid lines */}
       <gridHelper
         ref={gridRef}
-        args={[WORLD_SIZE, 24, '#6b9a60', '#5a8a50']}
+        args={[WORLD_SIZE, 24, gridMajor, gridMinor]}
       />
     </group>
   );
@@ -666,6 +670,8 @@ export default function CityScene3D({ children, focusWorldPos, focusZoom, focusB
   const [showAnalysis, setShowAnalysis] = useState(false);
   const fpsRef = useRef<HTMLDivElement>(null);
   const analysisRef = useRef<HTMLDivElement>(null);
+  const colorMode = useColorMode();
+  const dark = colorMode === 'dark';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -746,7 +752,7 @@ export default function CityScene3D({ children, focusWorldPos, focusZoom, focusB
           far: 1000,
         }}
         shadows={{ type: THREE.PCFShadowMap }}
-        style={{ background: '#87CEEB' }}
+        style={{ background: dark ? '#0f172a' : '#87CEEB' }}
         gl={{ antialias: true, alpha: false }}
       >
         <IsometricCamera />
@@ -758,13 +764,14 @@ export default function CityScene3D({ children, focusWorldPos, focusZoom, focusB
         {showAnalysis && <SceneAnalysisInternal targetRef={analysisRef} />}
 
         {/* Sky color */}
-        <color attach="background" args={['#87CEEB']} />
+        <color attach="background" args={[dark ? '#0f172a' : '#87CEEB']} />
 
-        {/* Bright, warm lighting */}
-        <ambientLight intensity={0.8} />
+        {/* Lighting — dimmer at night */}
+        <ambientLight intensity={dark ? 0.35 : 0.8} color={dark ? '#8090b0' : '#ffffff'} />
         <directionalLight
           position={[80, 120, 60]}
-          intensity={1.2}
+          intensity={dark ? 0.6 : 1.2}
+          color={dark ? '#6080c0' : '#ffffff'}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -773,10 +780,10 @@ export default function CityScene3D({ children, focusWorldPos, focusZoom, focusB
           shadow-camera-top={80}
           shadow-camera-bottom={-80}
         />
-        <directionalLight position={[-40, 80, -30]} intensity={0.4} />
-        <hemisphereLight args={['#87CEEB', '#5a8a50', 0.3]} />
+        <directionalLight position={[-40, 80, -30]} intensity={dark ? 0.15 : 0.4} color={dark ? '#6080c0' : '#ffffff'} />
+        <hemisphereLight args={[dark ? '#1a2040' : '#87CEEB', dark ? '#1a2a1a' : '#5a8a50', dark ? 0.15 : 0.3]} />
 
-        <GridGround />
+        <GridGround dark={dark} />
 
         {/* Camera controls — isometric pan/zoom with limited rotation */}
         <MapControls
